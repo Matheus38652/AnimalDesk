@@ -10,21 +10,20 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.optimizers import Adam
 from PIL import Image, ImageTk
 
-# Variáveis globais
 model = None
 class_indices = None
 cap = None
 
 DADOS_ANIMAIS = {
-        "pinscher": {
+    "pinscher": {
         "vida": "15 anos",
         "altura": "30 CM",
         "peso": "6 KG",
         "destaques": "Cãezinhos dessa raça adoram correr por toda a casa, além de latir quando percebem algo diferente — ou seja, sempre!",
         "temperamento": "O temperamento do Pinscher vai variar do treinamento e da socialização. Geralmente eles costumam latir para estranhos ou em situações que consideram de risco, mas essa é uma característica de cão guardião. No fundo eles são amorosos e adoram brincar com os seus tutores.",
-        "popularidade": "O cãozinho está entre as raças favoritas na Europa, Estados Unidos и aqui no Brasil também."
+        "popularidade": "O cãozinho está entre as raças favoritas na Europa, Estados Unidos e aqui no Brasil também."
     },
-    "bulldog": {
+    "bulldogue": {
         "vida": "8-10 anos",
         "altura": "31-40 cm",
         "peso": "18-23 kg",
@@ -75,7 +74,8 @@ DADOS_ANIMAIS = {
 }
 
 def abrir_janela_informacoes(especie):
-    info = DADOS_ANIMAIS.get(especie)
+    chave_normalizada = especie.lower().replace(" ", "-").replace("_", "-")
+    info = DADOS_ANIMAIS.get(chave_normalizada)
 
     if not info:
         messagebox.showinfo("Resultado", f'O animal é: {especie.capitalize()}')
@@ -83,17 +83,14 @@ def abrir_janela_informacoes(especie):
 
     janela_info = tk.Toplevel()
     janela_info.title(f"Informações sobre: {especie.capitalize()}")
-    janela_info.geometry("400x550") # Tamanho da janela
+    janela_info.geometry("400x550")
     
-    # Título
     lbl_titulo = tk.Label(janela_info, text=especie.capitalize(), font=("Arial", 16, "bold"))
     lbl_titulo.pack(pady=10)
 
-    # Frame para as estatísticas
     frame_stats = tk.Frame(janela_info)
     frame_stats.pack(pady=5, padx=10, fill="x")
 
-    # Estatísticas
     lbl_vida = tk.Label(frame_stats, text=f"Expectativa de vida: {info['vida']}", font=("Arial", 10))
     lbl_vida.pack(anchor="w")
     
@@ -103,7 +100,6 @@ def abrir_janela_informacoes(especie):
     lbl_peso = tk.Label(frame_stats, text=f"Média de Peso: {info['peso']}", font=("Arial", 10))
     lbl_peso.pack(anchor="w")
     
-    # Função auxiliar para criar seções de texto
     def criar_secao(parent, titulo, texto):
         lbl_titulo_secao = tk.Label(parent, text=titulo, font=("Arial", 12, "bold"))
         lbl_titulo_secao.pack(pady=(15, 2), anchor="w", padx=10)
@@ -111,13 +107,11 @@ def abrir_janela_informacoes(especie):
         lbl_texto_secao = tk.Label(parent, text=texto, wraplength=380, justify="left", font=("Arial", 10))
         lbl_texto_secao.pack(anchor="w", padx=10)
 
-    # Seções de texto
     criar_secao(janela_info, "Destaques e Curiosidades", info['destaques'])
     criar_secao(janela_info, "Temperamento", info['temperamento'])
     criar_secao(janela_info, "Popularidade", info['popularidade'])
 
 
-# Função para verificar a estrutura da pasta
 def verificar_estrutura_pasta(pasta_imagens):
     if not os.path.exists(pasta_imagens): return False
     subpastas = [f.path for f in os.scandir(pasta_imagens) if f.is_dir()]
@@ -126,92 +120,135 @@ def verificar_estrutura_pasta(pasta_imagens):
         if len([f for f in os.scandir(subpasta) if f.is_file()]) == 0: return False
     return True
 
-# Função para treinar o modelo
 def treinar_modelo(pasta_imagens):
     global model, class_indices
-    if not verificar_estrutura_pasta(pasta_imagens): return
+    if not verificar_estrutura_pasta(pasta_imagens):
+        messagebox.showerror("Erro de Estrutura", "A pasta selecionada não contém subpastas com imagens. Verifique a estrutura.")
+        return
+    
+    print("Iniciando o treinamento do modelo. Isso pode levar vários minutos...")
+    messagebox.showinfo("Treinamento", "O treinamento foi iniciado. A janela pode parecer travada, por favor aguarde a mensagem de conclusão.")
+
     datagen = ImageDataGenerator(rescale=1./255, rotation_range=40, width_shift_range=0.2, height_shift_range=0.2, shear_range=0.2, zoom_range=0.2, horizontal_flip=True, fill_mode='nearest')
     train_generator = datagen.flow_from_directory(pasta_imagens, target_size=(224, 224), batch_size=32, class_mode='categorical')
-    model = Sequential([Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)), MaxPooling2D(2, 2), Conv2D(64, (3, 3), activation='relu'), MaxPooling2D(2, 2), Conv2D(128, (3, 3), activation='relu'), MaxPooling2D(2, 2), Flatten(), Dense(128, activation='relu'), Dense(len(train_generator.class_indices), activation='softmax')])
+    
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=(224, 224, 3)),
+        MaxPooling2D(2, 2),
+        Conv2D(64, (3, 3), activation='relu'),
+        MaxPooling2D(2, 2),
+        Conv2D(128, (3, 3), activation='relu'),
+        MaxPooling2D(2, 2),
+        Flatten(),
+        Dense(128, activation='relu'),
+        Dense(len(train_generator.class_indices), activation='softmax')
+    ])
+    
     model.compile(optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
     model.fit(train_generator, epochs=20)
+    
     model.save('meu_modelo.h5')
-    with open('class_indices.json', 'w') as f: json.dump(train_generator.class_indices, f)
+    with open('class_indices.json', 'w') as f:
+        json.dump(train_generator.class_indices, f)
+        
     messagebox.showinfo("Treinamento Concluído", "Modelo treinado e salvo com sucesso!")
 
-# Função para carregar o modelo
 def carregar_modelo():
     global model, class_indices
     try:
         model = load_model('meu_modelo.h5')
-        with open('class_indices.json', 'r') as f: class_indices = json.load(f)
+        with open('class_indices.json', 'r') as f:
+            class_indices = json.load(f)
         return True
-    except Exception as e: return False
+    except Exception as e:
+        print(f"Erro ao carregar o modelo: {e}")
+        return False
 
-# Função para reconhecer o objeto
 def reconhecer_objeto(frame, class_indices):
     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     image = Image.fromarray(image).resize((224, 224))
     image = np.array(image) / 255.0
     image = np.expand_dims(image, axis=0)
+    
     previsao = model.predict(image)
     classe_index = np.argmax(previsao)
-    nome_classe = list(class_indices.keys())[list(class_indices.values()).index(classe_index)]
+    
+    indices_para_classes = {v: k for k, v in class_indices.items()}
+    nome_classe = indices_para_classes[classe_index]
+    
     return nome_classe
 
-# Funções da câmera e GUI
 def atualizar_imagem(label_img):
     global cap
-    ret, frame = cap.read()
-    if ret:
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        img_pil = Image.fromarray(img_rgb)
-        img_tk = ImageTk.PhotoImage(img_pil)
-        label_img.config(image=img_tk)
-        label_img.image = img_tk
-    label_img.after(50, atualizar_imagem, label_img)
+    if cap and cap.isOpened():
+        ret, frame = cap.read()
+        if ret:
+            img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img_pil = Image.fromarray(img_rgb)
+            img_tk = ImageTk.PhotoImage(img_pil)
+            label_img.config(image=img_tk)
+            label_img.image = img_tk
+        label_img.after(10, lambda: atualizar_imagem(label_img))
 
 def ativar_camera(label_img):
     global cap
-    cap = cv2.VideoCapture(0)
-    atualizar_imagem(label_img)
-
+    if cap is None or not cap.isOpened():
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            messagebox.showerror("Erro de Câmera", "Não foi possível acessar a câmera.")
+            cap = None
+            return
+        atualizar_imagem(label_img)
 
 def capturar_e_analisar(label_img):
+    if cap is None or not cap.isOpened():
+        messagebox.showwarning("Aviso", "Por favor, inicie a câmera primeiro.")
+        return
+        
     ret, frame = cap.read()
     if ret:
         especie_reconhecida = reconhecer_objeto(frame, class_indices)
         print(f'Previsão do modelo: {especie_reconhecida}')
-        # Chama a nova função para abrir a janela de informações
         abrir_janela_informacoes(especie_reconhecida)
     else:
         messagebox.showerror("Erro", "Não foi possível capturar a imagem.")
 
-# Funções da interface
 def selecionar_pasta_e_treinar():
     pasta_imagens = filedialog.askdirectory()
     if pasta_imagens:
         treinar_modelo(pasta_imagens)
-        habilitar_botao_analizar()
+        habilitar_botao_analisar()
 
-def habilitar_botao_analizar():
+def habilitar_botao_analisar():
     if carregar_modelo():
-        btn_analizar.config(state=tk.NORMAL)
+        btn_analisar.config(state=tk.NORMAL)
     else:
-        messagebox.showerror("Erro", "Falha ao carregar o modelo.")
+        messagebox.showerror("Erro", "Falha ao carregar o modelo. Tente treinar primeiro.")
 
 def interface_grafica():
-    global btn_analizar
+    global btn_analisar
     root = tk.Tk()
     root.title("Reconhecimento de Animais")
+    root.geometry("700x600")
+
     btn_treinar = tk.Button(root, text="Treinar Modelo", command=selecionar_pasta_e_treinar)
     btn_treinar.pack(pady=10)
+    
     label_img = tk.Label(root)
-    label_img.pack()
+    label_img.pack(pady=10)
+
     btn_camera = tk.Button(root, text="Iniciar Câmera", command=lambda: ativar_camera(label_img))
-    btn_camera.pack(pady=10)
-    btn_analizar = tk.Button(root, text="Analisar Animal", state=tk.DISABLED, command=lambda: capturar_e_analisar(label_img))
-    btn_analizar.pack(pady=10)
+    btn_camera.pack(pady=5)
+
+    btn_analisar = tk.Button(root, text="Analisar Animal da Câmera", state=tk.DISABLED, command=lambda: capturar_e_analisar(label_img))
+    btn_analisar.pack(pady=5)
+    
+    habilitar_botao_analisar()
+
     root.mainloop()
 
-interface_grafica()
+    if cap:
+        cap.release()
+
+if __name__ == "__main__":
+    interface_grafica()
